@@ -10,11 +10,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelectDifficulty }) => {
         <div className="absolute inset-0 z-40 bg-black/90 flex flex-col items-center justify-center space-y-8 animate-[fadeIn_0.5s]">
             {/* Title Block */}
             <div className="flex flex-col items-center space-y-2 mb-4">
-                 <h1 className="text-5xl md:text-8xl font-serif font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 to-blue-900 tracking-widest uppercase filter drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                    SHADOW
+                 <h1 className="text-4xl md:text-7xl font-serif font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 to-blue-900 tracking-widest uppercase filter drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                    THE ASTRAL
                 </h1>
-                <h2 className="text-3xl md:text-5xl font-serif font-bold text-cyan-800 tracking-[0.5em] uppercase border-b-2 border-cyan-900 pb-4">
-                    BREAKER
+                <h2 className="text-2xl md:text-5xl font-serif font-bold text-cyan-800 tracking-[0.5em] uppercase border-b-2 border-cyan-900 pb-4">
+                    SOVEREIGN
                 </h2>
             </div>
             
@@ -40,7 +40,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelectDifficulty }) => {
 
             <div className="absolute bottom-8 text-gray-800 text-[10px] text-center font-mono">
                 <p>PT PRODUCTIONS © 2025</p>
-                <p>Ver 0.9.2 // VERTICAL_SLICE</p>
+                <p>Ver 1.0.0 // GOLD_MASTER</p>
             </div>
             
             {/* Background Texture */}

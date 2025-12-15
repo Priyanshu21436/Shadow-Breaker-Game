@@ -10,19 +10,24 @@ const App: React.FC = () => {
   const engineRef = useRef<GameEngine | null>(null);
   const [gameState, setGameState] = useState<GameStateUI>({
     stats: {
-      hp: 100, maxHp: 100, stamina: 100, maxStamina: 100, xp: 0, maxXp: 100, level: 1, starDust: 0, maxStarDust: 100
+      hp: 100, maxHp: 100, stamina: 100, maxStamina: 100, xp: 0, maxXp: 100, level: 1, mana: 0, maxMana: 100,
+      might: 10, fortitude: 10, celerity: 10, acuity: 10, precision: 10, shadowCount: 0, maxShadows: 5
     },
     notifications: [],
-    phase: GamePhase.LOADING
+    phase: GamePhase.LOADING,
+    wave: 1,
+    mission: null,
+    playerClass: 'NONE'
   });
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // PERFORMANCE: Cap DPR at 1.5 for Mobile, 2 for Desktop.
-    // 3x or 4x pixel ratio destroys fillRate performance on mobile GPUs.
+    // OPTIMIZATION: Aggressive DPR Clamping
+    // High DPI rendering (Retina/OLED) is the #1 killer of canvas performance on mobile.
+    // We clamp to 1.0 on mobile to ensure 60fps on 4GB RAM devices.
     const isMobile = window.innerWidth < 800;
-    const maxDpr = isMobile ? 1.5 : 2;
+    const maxDpr = isMobile ? 1.0 : 1.5; 
     const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
     
     canvasRef.current.width = window.innerWidth * dpr;
@@ -38,7 +43,8 @@ const App: React.FC = () => {
 
     const handleResize = () => {
       if (canvasRef.current && engineRef.current) {
-         const rMaxDpr = window.innerWidth < 800 ? 1.5 : 2;
+         const rIsMobile = window.innerWidth < 800;
+         const rMaxDpr = rIsMobile ? 1.0 : 1.5;
          const rDpr = Math.min(window.devicePixelRatio || 1, rMaxDpr);
          
          canvasRef.current.width = window.innerWidth * rDpr;
@@ -51,6 +57,7 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      engine.stop(); // CRITICAL: Stop the engine loop on unmount to prevent double loops in Strict Mode
     };
   }, []);
 
@@ -75,6 +82,12 @@ const App: React.FC = () => {
         style={{ width: '100%', height: '100%' }}
       />
       
+      {gameState.phase === GamePhase.LOADING && (
+          <div className="absolute inset-0 flex items-center justify-center text-cyan-500 font-mono animate-pulse">
+              INITIALIZING VOID...
+          </div>
+      )}
+
       {gameState.phase === GamePhase.INTRO && <IntroScreen onComplete={handleIntroComplete} />}
       {gameState.phase === GamePhase.MENU && <MainMenu onSelectDifficulty={handleSelectDifficulty} />}
       

@@ -126,6 +126,9 @@ export class GameEngine {
   spawnTimer: number = 0;
   ghostTimer: number = 0;
   
+  private animationFrameId: number | null = null;
+  private isRunning: boolean = false;
+
   constructor(canvas: HTMLCanvasElement, uiCallback: (state: GameStateUI) => void) {
     this.input = new InputSystem();
     this.assets = new AssetManager();
@@ -135,10 +138,10 @@ export class GameEngine {
     
     this.player = new Player(0, 0);
     
-    // Initialize Pools
-    this.particlePool = new ObjectPool(() => new Particle(0,0,'#fff'), 200);
-    this.projectilePool = new ObjectPool(() => new Projectile(0,0,{x:0,y:0}), 100);
-    this.textPool = new ObjectPool(() => new FloatingText(0,0,'','#fff'), 30);
+    // Optimized: Reduce initial pool sizes for lower RAM usage
+    this.particlePool = new ObjectPool(() => new Particle(0,0,'#fff'), 100);
+    this.projectilePool = new ObjectPool(() => new Projectile(0,0,{x:0,y:0}), 50);
+    this.textPool = new ObjectPool(() => new FloatingText(0,0,'','#fff'), 20);
     
     this.grid = new SpatialGrid(200); 
   }
@@ -188,8 +191,18 @@ export class GameEngine {
   }
 
   startLoop() {
+    if (this.isRunning) return;
+    this.isRunning = true;
     this.lastTime = performance.now();
-    requestAnimationFrame(this.loop.bind(this));
+    this.loop(this.lastTime);
+  }
+
+  stop() {
+    this.isRunning = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
   }
 
   addNotification(text: string) {
@@ -304,6 +317,8 @@ export class GameEngine {
   }
 
   loop(timestamp: number) {
+    if (!this.isRunning) return;
+
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05); 
     this.lastTime = timestamp;
 
@@ -321,7 +336,7 @@ export class GameEngine {
       playerClass: this.playerClass
     });
 
-    requestAnimationFrame(this.loop.bind(this));
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
   update(dt: number) {
@@ -360,14 +375,16 @@ export class GameEngine {
 
     // --- Player ---
     // Optimization: Only check collision with nearby enemies
-    const nearbyEnemies = this.grid.getNearby(this.player);
+    const nearbyEntities = this.grid.getNearby(this.player);
+    // FILTER: Only consider actual enemies, exclude the player itself to prevent self-damage bugs
+    const potentialTargets = nearbyEntities.filter(e => e.type === EntityType.ENEMY && !e.isDead);
     
     const hitEnemies = this.player.updateState(
       dt, 
       this.input.state.moveVector, 
       this.input.state.isDashing && this.stats.stamina > 20,
       this.input.state.isAttacking,
-      nearbyEnemies, // Optimization: Passed grid subset instead of all enemies
+      potentialTargets,
       this.stats
     );
     
@@ -386,12 +403,15 @@ export class GameEngine {
         }
         
         const enemy = e as Enemy;
-        enemy.takeDamage(dmg, this.player);
-        this.spawnFloatingText(enemy.x, enemy.y, Math.floor(dmg).toString(), isCrit ? '#ff0000' : '#fff');
-        this.spawnParticles(enemy.x, enemy.y, '#b026ff', 3);
-        
-        if (enemy.isDead) {
-          this.onEnemyDeath(enemy);
+        // Safety check to prevent crashing if something non-enemy got in
+        if (enemy && typeof enemy.takeDamage === 'function') {
+            enemy.takeDamage(dmg, this.player);
+            this.spawnFloatingText(enemy.x, enemy.y, Math.floor(dmg).toString(), isCrit ? '#ff0000' : '#fff');
+            this.spawnParticles(enemy.x, enemy.y, '#b026ff', 2);
+            
+            if (enemy.isDead) {
+              this.onEnemyDeath(enemy);
+            }
         }
       });
     }
@@ -413,9 +433,9 @@ export class GameEngine {
                     // Arise Shadow
                     const s = new ShadowUnit(c.x, c.y, c.originalSprite, 10 + (this.stats.acuity * 2));
                     this.shadows.push(s);
-                    this.spawnParticles(c.x, c.y, '#00ffff', 20);
+                    this.spawnParticles(c.x, c.y, '#00ffff', 10); // Reduced particles
                     this.spawnFloatingText(c.x, c.y, "ARISE", '#00ffff');
-                    this.assets.playSound('summon', 0.8); // New Sound
+                    this.assets.playSound('summon', 0.8);
                 }
             });
         }
@@ -440,7 +460,7 @@ export class GameEngine {
     // --- Dash Effects ---
     if (this.player.isDashing) {
         this.ghostTimer += dt;
-        if (this.ghostTimer > 0.04) {
+        if (this.ghostTimer > 0.06) { // Reduced ghost frequency
             this.ghosts.push(new Ghost(this.player.x, this.player.y, this.player.radius, this.player.color, this.player.facing));
             this.ghostTimer = 0;
         }
@@ -462,7 +482,7 @@ export class GameEngine {
       if (dist < p.radius + this.player.radius && !this.player.isDashing) {
          this.takePlayerDamage(p.damage);
          p.active = false;
-         this.spawnParticles(p.x, p.y, p.color, 5);
+         this.spawnParticles(p.x, p.y, p.color, 3);
       }
     });
 
@@ -490,14 +510,17 @@ export class GameEngine {
     this.corpses = this.corpses.filter(c => !c.isDead);
     this.ghosts = this.ghosts.filter(g => !g.isDead);
     this.stats.shadowCount = this.shadows.length;
+    
+    // Corpse Cap for performance
+    if (this.corpses.length > 15) this.corpses.shift();
   }
 
   onEnemyDeath(e: Enemy) {
       this.gainXp(e.scoreValue);
-      this.spawnParticles(e.x, e.y, '#ffffff', 10);
+      this.spawnParticles(e.x, e.y, '#ffffff', 5); // Reduced particles
       
       // Boss Kill?
-      if (this.currentMission?.type === 'BOSS') { // Any kill counts as boss kill for now in boss mode as there is only 1 type of boss
+      if (this.currentMission?.type === 'BOSS') { 
          this.checkMissionProgress('BOSS', 1);
       } else {
          this.checkMissionProgress('KILL', 1);
@@ -528,8 +551,8 @@ export class GameEngine {
          this.renderer.ctx.globalAlpha = 0.5;
          this.renderer.ctx.fillStyle = '#00ffff';
          this.renderer.ctx.beginPath();
-         // Animated Pulse
-         const pulse = 10 + Math.sin(Date.now() * 0.01) * 2;
+         // Animated Pulse (Simplified math)
+         const pulse = 10 + Math.sin(Date.now() * 0.005) * 2;
          this.renderer.ctx.arc(0, 0, pulse, 0, Math.PI*2);
          this.renderer.ctx.fill();
          this.renderer.ctx.restore();
@@ -576,7 +599,9 @@ export class GameEngine {
   }
 
   spawnParticles(x: number, y: number, color: string, count: number) {
-    for(let i=0; i<count; i++) {
+    // Hard cap for low end
+    const safeCount = Math.min(count, 5);
+    for(let i=0; i<safeCount; i++) {
         const p = this.particlePool.get();
         p.reset(x, y, color);
     }
@@ -607,7 +632,7 @@ export class GameEngine {
 
       this.addNotification(`LEVEL UP: RANK ${this.stats.level}`);
       this.addNotification(`STATS INCREASED: MIGHT & PRECISION`);
-      this.spawnParticles(this.player.x, this.player.y, '#ffffff', 50);
+      this.spawnParticles(this.player.x, this.player.y, '#ffffff', 20);
       this.assets.playSound('dash'); 
     }
   }

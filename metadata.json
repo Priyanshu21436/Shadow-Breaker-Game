@@ -1,0 +1,5 @@
+{
+  "name": "The Astral Sovereign",
+  "description": "A high-fidelity Action-RPG vertical slice built with HTML5 Canvas. Features a 'Star-Eater' protagonist, dynamic combat with combo systems, cross-platform controls (virtual joystick for mobile), and a neon-infused 'Celestial' aesthetic.",
+  "requestFramePermissions": []
+}
